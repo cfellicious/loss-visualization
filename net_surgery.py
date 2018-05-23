@@ -2,6 +2,8 @@ import caffe
 import random
 import numpy as np
 import time
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 
 def calculate_param_count(net=None):
@@ -71,7 +73,7 @@ def create_grid(vectors=None, steps=0):
     :param steps: The number of steps from the starting to ending values
     :return: A matrix of size steps X number of columns in the vector
     """
-    if vectors is None or steps==0:
+    if vectors is None or steps == 0:
         return None
 
     # Get the shape of the vectors
@@ -81,9 +83,8 @@ def create_grid(vectors=None, steps=0):
 
     # Create the range of values for each value in the vector with the initial value
     # at row 0 and final value at row 1 for any column in the vectors
-    #value_matrix = np.empty(0)
-    value_matrix = np.linspace(vectors[0][0],vectors[1][0], num=steps).reshape(steps,1)
-    for col in range(1,vector_shape[1]):
+    value_matrix = np.linspace(vectors[0][0], vectors[1][0], num=steps).reshape(steps,1)
+    for col in range(1, vector_shape[1]):
         value_matrix = np.hstack([value_matrix, np.linspace(vectors[0][col], vectors[1][col], num=steps).reshape(steps,1)])
 
     return value_matrix
@@ -120,17 +121,24 @@ def create_loss_landscape(net=None, vectors=None):
     end_time = time.time() - start_time
     print('Duration : ' + str(end_time))
 
+    # Load a default image and set it as the data
+    im = caffe.io.load_image('/home/chris/PycharmProjects/loss-visualization/airplane1.png')
+    net.blobs['data'] = np.asarray(im)
+
+    print('Default Loss:', net.forward())
+    
+    loss_matrix = np.zeros((steps, steps))
     for x_idx in range(0, steps):
         for y_idx in range(0, steps):
-            print (x_idx, y_idx)
+            print(x_idx, y_idx)
             # Modify the network values
-            update_net_params(net,vector_grid1[x_idx,:],vector_grid2[y_idx,:])
+            update_net_params(net,vector_grid1[x_idx,:], vector_grid2[y_idx,:])
             # Calculate the loss
-
+            loss = net.forward()
             # Save the loss value to a matrix
+            loss_matrix[x_idx][y_idx] = loss.get('loss', 0)
 
-    # Junk random values
-    return np.random.random_sample(10)
+    return loss_matrix
 
 
 def main():
@@ -157,6 +165,15 @@ def main():
     directional_vectors = np.multiply(normalized_vectors, euclidean_norm)
 
     loss_values = create_loss_landscape(net, directional_vectors)
+
+    print(np.asarray(loss_values))
+
+    x = y = np.arange(-3.5, 4.0, 0.5)
+    X, Y = np.meshgrid(x, y)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(X, Y, loss_values)
+    plt.show()
 
 
 if __name__ == "__main__":
