@@ -83,9 +83,10 @@ def create_grid(vectors=None, steps=0):
 
     # Create the range of values for each value in the vector with the initial value
     # at row 0 and final value at row 1 for any column in the vectors
-    value_matrix = np.linspace(vectors[0][0], vectors[1][0], num=steps).reshape(steps,1)
+    value_matrix = np.linspace(vectors[0][0], vectors[1][0], num=steps).reshape(steps, 1)
     for col in range(1, vector_shape[1]):
-        value_matrix = np.hstack([value_matrix, np.linspace(vectors[0][col], vectors[1][col], num=steps).reshape(steps,1)])
+        value_matrix = np.hstack([value_matrix, \
+                                  np.linspace(vectors[0][col], vectors[1][col], num=steps).reshape(steps, 1)])
 
     return value_matrix
 
@@ -126,13 +127,13 @@ def create_loss_landscape(net=None, vectors=None):
     net.blobs['data'] = np.asarray(im)
 
     print('Default Loss:', net.forward())
-    
+
     loss_matrix = np.zeros((steps, steps))
     for x_idx in range(0, steps):
         for y_idx in range(0, steps):
             print(x_idx, y_idx)
             # Modify the network values
-            update_net_params(net,vector_grid1[x_idx,:], vector_grid2[y_idx,:])
+            update_net_params(net, vector_grid1[x_idx, :], vector_grid2[y_idx, :])
             # Calculate the loss
             loss = net.forward()
             # Save the loss value to a matrix
