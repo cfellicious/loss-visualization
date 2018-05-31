@@ -129,6 +129,9 @@ def create_grid(vectors=None, steps=0):
         value_matrix = np.hstack([value_matrix, \
                                   np.linspace(vectors[0][col], vectors[1][col], num=steps).reshape(steps, 1)])
 
+        if col % 1000 == 0:
+            print('Completed :', col,'/',vector_shape[1])
+
     return value_matrix
 
 
@@ -139,7 +142,7 @@ def create_loss_landscape(net=None, vectors=None, image=None, label=None):
     :param vectors: The normalized gaussian vectors
     :return: A matrix containing the loss values for each point in the grid
     """
-    steps = 15
+    steps = 25
     debug = 1
     start_time = time.time()
     # if not debug, calculate the grid and save the new data
@@ -172,7 +175,11 @@ def create_loss_landscape(net=None, vectors=None, image=None, label=None):
             net = update_net_params(net, layer_weights, vector_grid1[x_idx, :], vector_grid2[y_idx, :])
             # Calculate the loss
             softmax_loss_dict = net.forward(data=np.asarray([image]))
-            loss = -(math.log(softmax_loss_dict['prob'][0][label]))
+            loss = softmax_loss_dict['prob'][0][label]
+            if loss == 0:
+                loss = math.nan
+            else:
+                loss = -(math.log(loss))
             # Save the loss value to a matrix
             print(loss)
             loss_matrix[x_idx][y_idx] = loss
@@ -212,12 +219,13 @@ def calculate_param_count(net=None):
 
 
 def main():
-    #MODEL_FILE = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn/solver.prototxt'
-    #PRETRAINED = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn/model.caffemodel'
+    MODEL_FILE = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn/solver.prototxt'
+    PRETRAINED = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn/model.caffemodel'
     DB_PATH = '/home/chris/caffe/examples/cifar10/cifar10_test_lmdb'
     MEAN_FILE_PATH = '/home/chris/caffe/python/mean.binaryproto'
-    MODEL_FILE = '/home/chris/caffe/python/deploy.prototxt'
-    PRETRAINED = '/home/chris/caffe/python/model.caffemodel'
+    #MODEL_FILE = '/home/chris/caffe/python/deploy.prototxt'
+    #PRETRAINED = '/home/chris/caffe/python/model.caffemodel'
+
     '''
     MODEL_FILE = filedialog.askopenfilename(type='*.prototxt')
     PRETRAINED = filedialog.askopenfilename(type='*.caffemodel')
@@ -280,14 +288,15 @@ def main():
 
     loss_values = create_loss_landscape(net, directional_vectors, correct_image, correct_label)
 
-    x = y = np.arange(-3.5, 4.0, 0.5)
+    #x = y = np.arange(-3.5, 4.0, 0.5)
+    x = y = np.linspace(-1.0, 1.0, num=loss_values.shape[0] )
     X, Y = np.meshgrid(x, y)
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     ax.plot_surface(X, Y, loss_values)
     plt.show()
 
-    np.savetxt("loss.csv", loss_values, delimiter=",")
+    np.savetxt("/home/chris/PycharmProjects/loss-visualization/models/quick_learn/loss.csv", loss_values, delimiter=",")
 
 
 if __name__ == '__main__':
