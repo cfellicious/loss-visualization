@@ -6,6 +6,8 @@ import time
 import math
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+#from tkinter import filedialog
+
 
 def get_gaussian_vector(param_count=0,
                         vector_count=0):
@@ -210,10 +212,18 @@ def calculate_param_count(net=None):
 
 
 def main():
-    MODEL_FILE = '/home/chris/caffe/python/deploy.prototxt'
-    PRETRAINED = '/home/chris/caffe/python/model.caffemodel'
+    #MODEL_FILE = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn/solver.prototxt'
+    #PRETRAINED = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn/model.caffemodel'
     DB_PATH = '/home/chris/caffe/examples/cifar10/cifar10_test_lmdb'
     MEAN_FILE_PATH = '/home/chris/caffe/python/mean.binaryproto'
+    MODEL_FILE = '/home/chris/caffe/python/deploy.prototxt'
+    PRETRAINED = '/home/chris/caffe/python/model.caffemodel'
+    '''
+    MODEL_FILE = filedialog.askopenfilename(type='*.prototxt')
+    PRETRAINED = filedialog.askopenfilename(type='*.caffemodel')
+    DB_PATH = filedialog.askdirectory()
+    MEAN_FILE_PATH = filedialog.askopenfilename(type='*.binaryproto')
+    '''
     net = caffe.Net(MODEL_FILE, PRETRAINED, caffe.TRAIN)
     lmdb_env = lmdb.open(DB_PATH)
     lmdb_txn = lmdb_env.begin()
@@ -276,6 +286,8 @@ def main():
     ax = fig.add_subplot(111, projection='3d')
     ax.plot_surface(X, Y, loss_values)
     plt.show()
+
+    np.savetxt("loss.csv", loss_values, delimiter=",")
 
 
 if __name__ == '__main__':
