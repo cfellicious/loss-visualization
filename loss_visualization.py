@@ -135,17 +135,17 @@ def create_grid(vectors=None, steps=0):
     return value_matrix
 
 
-def create_loss_landscape(net=None, vectors=None, image=None, label=None, dir=None):
+def create_loss_landscape(net=None, vectors=None, image=None, label=None, dir=None, steps=0):
     """
     This function creates a grid with the vectors to visualize the loss landscape of the network
     :param net: The Neural Network whose loss landscape is to be visualized
     :param vectors: The normalized gaussian vectors
     :param image: image to be tested
     :param dir: The path of the directory where the numpy grid values are to be written
+    :param steps: The number of steps in the grid
     :return: A matrix containing the loss values for each point in the grid
     """
-    steps = 51
-    debug = 0
+    debug = 1
     start_time = time.time()
     # if not debug, calculate the grid and save the new data
     if not debug or not(os.path.exists(os.path.join(dir,'vector_grid1.npy')) and
@@ -222,8 +222,8 @@ def calculate_param_count(net=None):
 
 
 def main():
-    MODEL_FILE = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn/solver.prototxt'
-    PRETRAINED = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn/model.caffemodel'
+    #MODEL_FILE = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn/solver.prototxt'
+    #PRETRAINED = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn/model.caffemodel'
     DB_PATH = '/home/chris/caffe/examples/cifar10/cifar10_test_lmdb'
     MEAN_FILE_PATH = '/home/chris/caffe/python/mean.binaryproto'
     #MODEL_FILE = '/home/chris/caffe/python/deploy.prototxt'
@@ -236,8 +236,10 @@ def main():
     MEAN_FILE_PATH = filedialog.askopenfilename(type='*.binaryproto')
     '''
     dir = '/home/chris/PycharmProjects/loss-visualization/models/sigmoid'
+    steps = 51
     MODEL_FILE = os.path.join(dir, 'solver.prototxt')
     PRETRAINED = os.path.join(dir, 'model.caffemodel')
+    MEAN_FILE_PATH = os.path.join(dir,'mean.binaryproto')
     net = caffe.Net(MODEL_FILE, PRETRAINED, caffe.TRAIN)
     lmdb_env = lmdb.open(DB_PATH)
     lmdb_txn = lmdb_env.begin()
@@ -292,7 +294,7 @@ def main():
     # save the numpy array
     np.save('directional_vectors', directional_vectors)
 
-    loss_values = create_loss_landscape(net, directional_vectors, correct_image, correct_label, dir)
+    loss_values = create_loss_landscape(net, directional_vectors, correct_image, correct_label, dir, steps=steps)
 
     #x = y = np.arange(-3.5, 4.0, 0.5)
     x = y = np.linspace(-1.0, 1.0, num=loss_values.shape[0] )

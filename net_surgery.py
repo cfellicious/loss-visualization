@@ -1,6 +1,7 @@
 import caffe
 import copy
 import random
+import lmdb
 import numpy as np
 import time
 import matplotlib.pyplot as plt
@@ -24,8 +25,6 @@ def calculate_param_count(net=None):
         if curr_layer is None:
             continue
         if net.layer_dict.get(layer, None).type in ('Convolution', 'InnerProduct'):
-            # TODO: Calculate the weight matrix too
-            # TODO: Add bias values too. Currently, only weights are used.
             curr_layer_shape = net.params[layer][0].data.shape
             norm = norm + (net.params[layer][0].data * net.params[layer][0].data).sum()
             norm = norm + (net.params[layer][1].data * net.params[layer][1].data).sum()
@@ -52,7 +51,17 @@ def get_gaussian_vector(param_count=0,
         return 0
     # This samples from a uniform distribution between 0 and 1, with param_count columns
     # and vector_count rows
-    return np.random.uniform(low=0, high=1, size=(vector_count, param_count))
+    vectors = np.random.normal(loc=0, scale=1, size=(1, param_count))
+    for idx in range(1, vector_count):
+        curr_vec = np.random.normal(loc=0, scale=1, size=(1, param_count))
+        mean = np.mean(curr_vec)
+        std_dev = np.std(curr_vec)
+        curr_vec = np.subtract(curr_vec, mean)
+        if std_dev != 0:
+            curr_vec = np.divide(curr_vec, std_dev)
+        vectors = np.row_stack((vectors, curr_vec))
+    return vectors
+
 
 
 def calculate_norm(input_matrix=None):
@@ -154,6 +163,29 @@ def save_network_weights(net=None):
     return copy.deepcopy(net_weights)
 
 
+def get_image(path=None):
+    if path is None:
+        return
+
+    # Load a default image and set it as the data
+    im = caffe.io.load_image(path)
+
+    # Subtract the mean from the image
+    blob = caffe.proto.caffe_pb2.BlobProto()
+    mean_image_binary = open('/home/chris/caffe/python/mean.binaryproto', 'rb').read()
+    blob.ParseFromString(mean_image_binary)
+    mean_image = np.array(caffe.io.blobproto_to_array(blob))
+    np_im = np.zeros(shape=(3, 32, 32))
+    np_im[0, :, :] = im[:, :, 0]
+    np_im[1, :, :] = im[:, :, 1]
+    np_im[2, :, :] = im[:, :, 2]
+
+    return np_im #- mean_image
+
+
+
+
+
 def create_loss_landscape(net=None, vectors=None):
     """
     This function creates a grid with the vectors to visualize the loss landscape of the network
@@ -178,10 +210,9 @@ def create_loss_landscape(net=None, vectors=None):
     end_time = time.time() - start_time
     print('Duration : ' + str(end_time))
 
-    # Load a default image and set it as the data
-    im = caffe.io.load_image('/home/chris/PycharmProjects/loss-visualization/airplane1.png')
-    net.blobs['data'] = np.asarray(im)
-
+    image = get_image('/home/chris/PycharmProjects/loss-visualization/samples/airplane2.png')
+    net.blobs['data'].data[...] = image
+    #net.blobs['label'] = 4
 
     # Save the initial weights of the network
     layer_weights = save_network_weights(net=net)
@@ -195,23 +226,66 @@ def create_loss_landscape(net=None, vectors=None):
             # Modify the network values
             net = update_net_params(net, layer_weights, vector_grid1[x_idx, :], vector_grid2[y_idx, :])
             # Calculate the loss
-            im = caffe.io.load_image('/home/chris/PycharmProjects/loss-visualization/airplane1.png')
-            net.blobs['data'] = np.asarray(im)
-            loss = net.forward(start='conv1', end='loss')
+            loss = net.forward()
             # Save the loss value to a matrix
-            loss_matrix[x_idx][y_idx] = loss.get('loss', 0)
+            #print(loss)
+            #loss_matrix[x_idx][y_idx] = loss.get('loss', 0)
 
     return loss_matrix
 
 
 def main():
+    MODEL_FILE = '/home/chris/caffe/python/solver.prototxt'
+    PRETRAINED = '/home/chris/caffe/python/model.caffemodel'
+    path = '/home/chris/PycharmProjects/loss-visualization/samples/airplane1.png'
     # Load the network into memory through the pyCaffe Interface
     # TODO: The solver and prototxt files should be chosen through GUI
-    net = caffe.Net('/home/chris/caffe/python/solver.prototxt',
-                    '/home/chris/caffe/python/model.caffemodel', caffe.TEST)
+    net = caffe.Net(MODEL_FILE, PRETRAINED, caffe.TRAIN)
+
+    DB_PATH = './examples/cifar10/cifar10_test_lmdb'
+    lmdb_env = lmdb.open(DB_PATH)
+    lmdb_txn = lmdb_env.begin()
+    lmdb_cursor = lmdb_txn.cursor()
+    count = 0
+    correct = 0
+    correct_images = list()
+    '''
+    for key, value in lmdb_cursor:
+        count = count + 1
+        datum = caffe.proto.caffe_pb2.Datum()
+        datum.ParseFromString(value)
+        label = int(datum.label)
+        image = caffe.io.datum_to_array(datum)
+        image = image.astype(np.uint8)
+        # out = net.forward_all(data=np.asarray([image]))
+        out = net.forward(data=np.asarray([image]))
+        predicted_label = out.argmax(axis=0)
+        if label == predicted_label:
+            correct = correct + 1
+            correct_images.append(image.tolist())
+        # print("Label is class " + str(label) + ", predicted class is " + str(predicted_label))
+        if count == 10000:
+            break
+    print(str(correct) + " out of " + str(count) + " were classified correctly")
+    '''
+
+    '''
+    blob = caffe.proto.caffe_pb2.BlobProto()
+    mean_image_binary = open('/home/chris/caffe/python/mean.binaryproto', 'rb').read()
+    blob.ParseFromString(mean_image_binary)
+    mean_image = np.array(caffe.io.blobproto_to_array(blob))
+    mean_image = np.reshape(mean_image, newshape=(3,32,32))
+
+    net = caffe.Classifier(MODEL_FILE, PRETRAINED,
+                           mean=mean_image,
+                           channel_swap=(2, 1, 0),
+                           raw_scale=255)
+    im = caffe.io.load_image(path, color=True)
+    net.predict(np.asarray(im))
+    '''
 
     # Set the mode as GPU for CAFFE
-    caffe.set_mode_gpu()
+    caffe.set_mode_cpu()
 
     # Calculate the total parameter count in the network
     # Calculate the Frobenius norm/Euclidean norm of the network
