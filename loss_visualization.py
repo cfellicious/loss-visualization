@@ -1,12 +1,12 @@
 import caffe
 import lmdb
 import numpy as np
+import os
 import copy
 import time
 import math
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-#from tkinter import filedialog
 
 
 def get_gaussian_vector(param_count=0,
@@ -135,26 +135,29 @@ def create_grid(vectors=None, steps=0):
     return value_matrix
 
 
-def create_loss_landscape(net=None, vectors=None, image=None, label=None):
+def create_loss_landscape(net=None, vectors=None, image=None, label=None, dir=None):
     """
     This function creates a grid with the vectors to visualize the loss landscape of the network
     :param net: The Neural Network whose loss landscape is to be visualized
     :param vectors: The normalized gaussian vectors
+    :param image: image to be tested
+    :param dir: The path of the directory where the numpy grid values are to be written
     :return: A matrix containing the loss values for each point in the grid
     """
-    steps = 25
-    debug = 1
+    steps = 51
+    debug = 0
     start_time = time.time()
     # if not debug, calculate the grid and save the new data
-    if not debug:
+    if not debug or not(os.path.exists(os.path.join(dir,'vector_grid1.npy')) and
+                        os.path.exists(os.path.join(dir,'vector_grid2.npy'))):
         vector_grid1 = create_grid(np.vstack((vectors[0], np.negative(vectors[0]))), steps)
         vector_grid2 = create_grid(np.vstack((vectors[1], np.negative(vectors[1]))), steps)
 
-        np.save('./vector_grid1', vector_grid1)
-        np.save('./vector_grid2', vector_grid2)
+        np.save(os.path.join(dir, 'vector_grid1'), vector_grid1)
+        np.save(os.path.join(dir, 'vector_grid2'), vector_grid2)
     else:
-        vector_grid1 = np.load('./vector_grid1.npy')
-        vector_grid2 = np.load('./vector_grid2.npy')
+        vector_grid1 = np.load(os.path.join('vector_grid1.npy'))
+        vector_grid2 = np.load(os.path.join('vector_grid2.npy'))
 
     end_time = time.time() - start_time
     print('Duration : ' + str(end_time))
@@ -232,6 +235,9 @@ def main():
     DB_PATH = filedialog.askdirectory()
     MEAN_FILE_PATH = filedialog.askopenfilename(type='*.binaryproto')
     '''
+    dir = '/home/chris/PycharmProjects/loss-visualization/models/sigmoid'
+    MODEL_FILE = os.path.join(dir, 'solver.prototxt')
+    PRETRAINED = os.path.join(dir, 'model.caffemodel')
     net = caffe.Net(MODEL_FILE, PRETRAINED, caffe.TRAIN)
     lmdb_env = lmdb.open(DB_PATH)
     lmdb_txn = lmdb_env.begin()
@@ -286,7 +292,7 @@ def main():
     # save the numpy array
     np.save('directional_vectors', directional_vectors)
 
-    loss_values = create_loss_landscape(net, directional_vectors, correct_image, correct_label)
+    loss_values = create_loss_landscape(net, directional_vectors, correct_image, correct_label, dir)
 
     #x = y = np.arange(-3.5, 4.0, 0.5)
     x = y = np.linspace(-1.0, 1.0, num=loss_values.shape[0] )
@@ -296,7 +302,7 @@ def main():
     ax.plot_surface(X, Y, loss_values)
     plt.show()
 
-    np.savetxt("/home/chris/PycharmProjects/loss-visualization/models/quick_learn/loss.csv", loss_values, delimiter=",")
+    np.savetxt(os.path.join(dir,'loss.csv'), loss_values, delimiter=",")
 
 
 if __name__ == '__main__':
