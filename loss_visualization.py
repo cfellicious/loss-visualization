@@ -135,12 +135,16 @@ def create_grid(vectors=None, steps=0):
     return value_matrix
 
 
-def create_loss_landscape(net=None, vectors=None, image=None, label=None, dir=None, steps=0):
+def create_loss_landscape(net=None, vectors=None, best_image=None, best_label=None,
+                          worst_image=None, worst_label=None, dir=None, steps=0):
     """
     This function creates a grid with the vectors to visualize the loss landscape of the network
     :param net: The Neural Network whose loss landscape is to be visualized
     :param vectors: The normalized gaussian vectors
-    :param image: image to be tested
+    :param best_image: image with the highest correctly classified probability to be tested
+    :param best_label: label of the image
+    :param worst_image: correctly classified image with the worst probability
+    :param worst_label: label of the image
     :param dir: The path of the directory where the numpy grid values are to be written
     :param steps: The number of steps in the grid
     :return: A matrix containing the loss values for each point in the grid
@@ -165,9 +169,8 @@ def create_loss_landscape(net=None, vectors=None, image=None, label=None, dir=No
     # Save the initial weights of the network
     layer_weights = save_network_weights(net=net)
 
-    out = net.forward(data=np.asarray([image]))
-    predicted_label = out['prob'][0][label]
-
+    out = net.forward(data=np.asarray([best_image]))
+    predicted_label = out['prob'][0][best_label]
     print('Default Loss:', -(math.log(predicted_label)))
 
     loss_matrix = np.zeros((steps, steps))
@@ -177,8 +180,8 @@ def create_loss_landscape(net=None, vectors=None, image=None, label=None, dir=No
             # Modify the network values
             net = update_net_params(net, layer_weights, vector_grid1[x_idx, :], vector_grid2[y_idx, :])
             # Calculate the loss
-            softmax_loss_dict = net.forward(data=np.asarray([image]))
-            loss = softmax_loss_dict['prob'][0][label]
+            softmax_loss_dict = net.forward(data=np.asarray([best_image]))
+            loss = softmax_loss_dict['prob'][0][best_label]
             if loss == 0:
                 loss = math.nan
             else:
@@ -235,7 +238,7 @@ def main():
     DB_PATH = filedialog.askdirectory()
     MEAN_FILE_PATH = filedialog.askopenfilename(type='*.binaryproto')
     '''
-    dir = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn'
+    dir = '/home/chris/PycharmProjects/loss-visualization/models/full_learn'
     steps = 51
     MODEL_FILE = os.path.join(dir, 'solver.prototxt')
     PRETRAINED = os.path.join(dir, 'model.caffemodel')
@@ -246,6 +249,8 @@ def main():
     lmdb_cursor = lmdb_txn.cursor()
     count = 0
     correct = 0
+    worst_prob = 1
+    best_prob = 0
     blob = caffe.proto.caffe_pb2.BlobProto()
     mean_image_binary = open(MEAN_FILE_PATH, 'rb').read()
     blob.ParseFromString(mean_image_binary)
@@ -267,15 +272,25 @@ def main():
         out = net.forward(data=np.asarray([image]))
         predicted_label = out['prob'].argmax()
         curr_prob = out['prob'][0][predicted_label]
-        if label == predicted_label and curr_prob > max_prob:
+        if label == predicted_label:
             correct = correct + 1
             correct_image = image
             correct_label = label
             max_prob = curr_prob
-            # BEST AND WORST CORRECTLY CLASSIFIED IMAGES
+            if curr_prob > best_prob:
+                best_image = image
+                best_prob = curr_prob
+                best_label = label
+
+            if curr_prob < worst_prob:
+                worst_image = image
+                worst_label = label
+                worst_prob = curr_prob
         # print("Label is class " + str(label) + ", predicted class is " + str(predicted_label))
         if count == 10000:
             break
+
+    lmdb_env.close()
     print(str(correct) + " out of " + str(count) + " were classified correctly")
 
     # Get the normalized Gaussian vectors for the total number of parameters
@@ -298,7 +313,8 @@ def main():
     # save the numpy array
     np.save('directional_vectors', directional_vectors)
 
-    loss_values = create_loss_landscape(net, directional_vectors, correct_image, correct_label, dir, steps=steps)
+    loss_values = create_loss_landscape(net, directional_vectors, best_image, best_label,
+                                        worst_image, worst_label, dir, steps=steps)
 
     #x = y = np.arange(-3.5, 4.0, 0.5)
     x = y = np.linspace(-1.0, 1.0, num=loss_values.shape[0] )
