@@ -145,7 +145,7 @@ def create_loss_landscape(net=None, vectors=None, image=None, label=None, dir=No
     :param steps: The number of steps in the grid
     :return: A matrix containing the loss values for each point in the grid
     """
-    debug = 1
+    debug = 0
     start_time = time.time()
     # if not debug, calculate the grid and save the new data
     if not debug or not(os.path.exists(os.path.join(dir,'vector_grid1.npy')) and
@@ -235,7 +235,7 @@ def main():
     DB_PATH = filedialog.askdirectory()
     MEAN_FILE_PATH = filedialog.askopenfilename(type='*.binaryproto')
     '''
-    dir = '/home/chris/PycharmProjects/loss-visualization/models/sigmoid'
+    dir = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn'
     steps = 51
     MODEL_FILE = os.path.join(dir, 'solver.prototxt')
     PRETRAINED = os.path.join(dir, 'model.caffemodel')
@@ -252,6 +252,7 @@ def main():
     mean_image = np.array(caffe.io.blobproto_to_array(blob))
     mean_image = np.reshape(mean_image, newshape=(3,32,32))
     caffe.set_mode_gpu()
+    max_prob = 0
     for key, value in lmdb_cursor:
         count = count + 1
         datum = caffe.proto.caffe_pb2.Datum()
@@ -265,10 +266,13 @@ def main():
         #out = net.forward()
         out = net.forward(data=np.asarray([image]))
         predicted_label = out['prob'].argmax()
-        if label == predicted_label:
+        curr_prob = out['prob'][0][predicted_label]
+        if label == predicted_label and curr_prob > max_prob:
             correct = correct + 1
             correct_image = image
             correct_label = label
+            max_prob = curr_prob
+            # BEST AND WORST CORRECTLY CLASSIFIED IMAGES
         # print("Label is class " + str(label) + ", predicted class is " + str(predicted_label))
         if count == 10000:
             break
