@@ -149,7 +149,7 @@ def create_loss_landscape(net=None, vectors=None, best_image=None, best_label=No
     :param steps: The number of steps in the grid
     :return: A matrix containing the loss values for each point in the grid
     """
-    debug = 0
+    debug = 1
     start_time = time.time()
     # if not debug, calculate the grid and save the new data
     if not debug or not(os.path.exists(os.path.join(dir,'vector_grid1.npy')) and
@@ -160,8 +160,8 @@ def create_loss_landscape(net=None, vectors=None, best_image=None, best_label=No
         np.save(os.path.join(dir, 'vector_grid1'), vector_grid1)
         np.save(os.path.join(dir, 'vector_grid2'), vector_grid2)
     else:
-        vector_grid1 = np.load(os.path.join('vector_grid1.npy'))
-        vector_grid2 = np.load(os.path.join('vector_grid2.npy'))
+        vector_grid1 = np.load(os.path.join(dir, 'vector_grid1.npy'))
+        vector_grid2 = np.load(os.path.join(dir, 'vector_grid2.npy'))
 
     end_time = time.time() - start_time
     print('Duration : ' + str(end_time))
@@ -173,7 +173,8 @@ def create_loss_landscape(net=None, vectors=None, best_image=None, best_label=No
     predicted_label = out['prob'][0][best_label]
     print('Default Loss:', -(math.log(predicted_label)))
 
-    loss_matrix = np.zeros((steps, steps))
+    best_image_loss_matrix = np.zeros((steps, steps))
+    worst_image_loss_matrix = np.zeros((steps, steps))
     for x_idx in range(0, steps):
         for y_idx in range(0, steps):
             print(x_idx, y_idx)
@@ -188,9 +189,18 @@ def create_loss_landscape(net=None, vectors=None, best_image=None, best_label=No
                 loss = -(math.log(loss))
             # Save the loss value to a matrix
             print(loss)
-            loss_matrix[x_idx][y_idx] = loss
+            best_image_loss_matrix[x_idx][y_idx] = loss
 
-    return loss_matrix
+            softmax_loss_dict = net.forward(data=np.asarray([worst_image]))
+            loss = softmax_loss_dict['prob'][0][worst_label]
+            if loss == 0:
+                loss = math.nan
+            else:
+                loss = -(math.log(loss))
+
+            worst_image_loss_matrix[x_idx][y_idx] = loss
+
+    return best_image_loss_matrix, worst_image_loss_matrix
 
 
 def calculate_param_count(net=None):
@@ -264,7 +274,7 @@ def main():
         datum.ParseFromString(value)
         label = int(datum.label)
         image = caffe.io.datum_to_array(datum)
-        image = image - mean_image
+        image = (image - mean_image) #* 0.0078125
         # out = net.forward_all(data=np.asarray([image]))
         #net.blobs['data'].data[...] = image
         #net.blobs['label'].data[...] = label
@@ -300,6 +310,7 @@ def main():
     # Calculate the Frobenius norm/Euclidean norm of the network
     # Square root of sum of absolute squares of all the weights in the network
     param_count, euclidean_norm = calculate_param_count(net)
+    print(param_count)
     gaussian_vec = get_gaussian_vector(param_count, vector_count)
 
     # Normalize the Gaussian Vector with the norm
@@ -313,18 +324,19 @@ def main():
     # save the numpy array
     np.save('directional_vectors', directional_vectors)
 
-    loss_values = create_loss_landscape(net, directional_vectors, best_image, best_label,
-                                        worst_image, worst_label, dir, steps=steps)
+    best_image_loss_values, worst_image_loss_values = create_loss_landscape(net, directional_vectors, best_image, best_label,
+                                                        worst_image, worst_label, dir, steps=steps)
 
     #x = y = np.arange(-3.5, 4.0, 0.5)
-    x = y = np.linspace(-1.0, 1.0, num=loss_values.shape[0] )
+    x = y = np.linspace(-1.0, 1.0, num=best_image_loss_values.shape[0] )
     X, Y = np.meshgrid(x, y)
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(X, Y, loss_values)
+    ax.plot_surface(X, Y, best_image_loss_values)
     plt.show()
 
-    np.savetxt(os.path.join(dir,'loss.csv'), loss_values, delimiter=",")
+    np.savetxt(os.path.join(dir, 'best_image_loss.csv'), best_image_loss_values, delimiter=",")
+    np.savetxt(os.path.join(dir, 'worst_image_loss.csv'), worst_image_loss_values, delimiter=",")
 
 
 if __name__ == '__main__':
