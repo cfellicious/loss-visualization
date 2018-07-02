@@ -136,7 +136,7 @@ def create_grid(vectors=None, steps=0):
 
 
 def create_loss_landscape(net=None, vectors=None, best_image=None, best_label=None,
-                          worst_image=None, worst_label=None, dir=None, steps=0):
+                          worst_image=None, worst_label=None, dir=None, steps=0, lmdb_env=None, mean_path=None):
     """
     This function creates a grid with the vectors to visualize the loss landscape of the network
     :param net: The Neural Network whose loss landscape is to be visualized
@@ -173,34 +173,60 @@ def create_loss_landscape(net=None, vectors=None, best_image=None, best_label=No
     predicted_label = out['prob'][0][best_label]
     print('Default Loss:', -(math.log(predicted_label)))
 
-    best_image_loss_matrix = np.zeros((steps, steps))
-    worst_image_loss_matrix = np.zeros((steps, steps))
+    loss_matrix = np.zeros((steps, steps))
+    accuracy_matrix = np.zeros((steps, steps))
+    best_image_loss = np.zeros((steps, steps))
+    best_image_accuracy = np.zeros((steps, steps))
+    worst_image_loss = np.zeros((steps, steps))
+    worst_image_accuracy = np.zeros((steps, steps))
     for x_idx in range(0, steps):
         for y_idx in range(0, steps):
             print(x_idx, y_idx)
             # Modify the network values
             net = update_net_params(net, layer_weights, vector_grid1[x_idx, :], vector_grid2[y_idx, :])
-            # Calculate the loss
-            softmax_loss_dict = net.forward(data=np.asarray([best_image]))
-            loss = softmax_loss_dict['prob'][0][best_label]
+
+            # Calculate the loss for the entire testing database
+
+            loss, accuracy = compute_loss_for_db(net=net, lmdb_env=lmdb_env, mean_file_path=mean_path)
+
             if loss == 0:
                 loss = math.nan
             else:
                 loss = -(math.log(loss))
             # Save the loss value to a matrix
             print(loss)
-            best_image_loss_matrix[x_idx][y_idx] = loss
+            loss_matrix[x_idx][y_idx] = loss
+            accuracy_matrix[x_idx][y_idx] = accuracy
+            
+
+            softmax_loss_dict = net.forward(data=np.asarray([best_image]))
+            loss_best = softmax_loss_dict['prob'][0][best_label]
+            predicted_label = softmax_loss_dict['prob'].argmax()
+            if loss_best == 0:
+                loss_best = math.nan
+            else:
+                loss_best = -(math.log(loss_best))
+            best_image_loss[x_idx][y_idx] = loss_best
+            if predicted_label == best_label:
+                best_image_accuracy[x_idx][y_idx] = 1
+            else:
+                best_image_accuracy[x_idx][y_idx] = 0
 
             softmax_loss_dict = net.forward(data=np.asarray([worst_image]))
-            loss = softmax_loss_dict['prob'][0][worst_label]
-            if loss == 0:
-                loss = math.nan
+            loss_worst = softmax_loss_dict['prob'][0][worst_label]
+            predicted_label = softmax_loss_dict['prob'].argmax()
+            if loss_worst == 0:
+                loss_worst = math.nan
             else:
-                loss = -(math.log(loss))
+                loss_worst = -(math.log(loss_worst))
+            worst_image_loss[x_idx][y_idx] = loss_worst
+            if predicted_label == worst_label:
+                worst_image_accuracy[x_idx][y_idx] = 1
+            else:
+                worst_image_accuracy[x_idx][y_idx] = 0
 
-            worst_image_loss_matrix[x_idx][y_idx] = loss
 
-    return best_image_loss_matrix, worst_image_loss_matrix
+    return loss_matrix, accuracy_matrix, best_image_loss, best_image_accuracy, worst_image_loss, worst_image_accuracy
 
 
 def calculate_param_count(net=None):
@@ -234,6 +260,47 @@ def calculate_param_count(net=None):
     return param_count, norm
 
 
+def compute_loss_for_db(net=None, lmdb_env=None, mean_file_path=None):
+    lmdb_txn = lmdb_env.begin()
+    lmdb_cursor = lmdb_txn.cursor()
+    count = 0
+    correct = 0
+    worst_prob = 1
+    best_prob = 0
+    blob = caffe.proto.caffe_pb2.BlobProto()
+    mean_image_binary = open(mean_file_path, 'rb').read()
+    blob.ParseFromString(mean_image_binary)
+    mean_image = np.array(caffe.io.blobproto_to_array(blob))
+    mean_image = np.reshape(mean_image, newshape=(3, 32, 32))
+    caffe.set_mode_gpu()
+    max_prob = 0
+    loss = 0
+    accuracy = 0
+    for key, value in lmdb_cursor:
+        count = count + 1
+        datum = caffe.proto.caffe_pb2.Datum()
+        datum.ParseFromString(value)
+        label = int(datum.label)
+        image = caffe.io.datum_to_array(datum)
+        image = (image - mean_image)
+        out = net.forward(data=np.asarray([image]))
+        predicted_label = out['prob'].argmax()
+        curr_prob = out['prob'][0][label]
+        loss = loss + curr_prob
+        if label == predicted_label:
+            correct = correct + 1
+        # print("Label is class " + str(label) + ", predicted class is " + str(predicted_label))
+        if count == 10000:
+            break
+
+    #lmdb_env.close()
+    # Average loss and accuracy for the updated net
+    loss = (loss/count)
+    accuracy = correct/count
+    print(str(correct) + " out of " + str(count) + " were classified correctly")
+    return loss, accuracy
+
+
 def main():
     #MODEL_FILE = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn/solver.prototxt'
     #PRETRAINED = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn/model.caffemodel'
@@ -248,7 +315,7 @@ def main():
     DB_PATH = filedialog.askdirectory()
     MEAN_FILE_PATH = filedialog.askopenfilename(type='*.binaryproto')
     '''
-    dir = '/home/chris/PycharmProjects/loss-visualization/models/full_learn'
+    dir = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn'
     steps = 51
     MODEL_FILE = os.path.join(dir, 'solver.prototxt')
     PRETRAINED = os.path.join(dir, 'model.caffemodel')
@@ -300,7 +367,7 @@ def main():
         if count == 10000:
             break
 
-    lmdb_env.close()
+    #lmdb_env.close()
     print(str(correct) + " out of " + str(count) + " were classified correctly")
 
     # Get the normalized Gaussian vectors for the total number of parameters
@@ -324,8 +391,9 @@ def main():
     # save the numpy array
     np.save('directional_vectors', directional_vectors)
 
-    best_image_loss_values, worst_image_loss_values = create_loss_landscape(net, directional_vectors, best_image, best_label,
-                                                        worst_image, worst_label, dir, steps=steps)
+    loss, accuracy, best_image_loss_values, best_image_accuracy, worst_image_loss_values, worst_image_accuracy = create_loss_landscape(net, directional_vectors, best_image, best_label,
+                                                        worst_image, worst_label, dir, steps=steps, lmdb_env=lmdb_env,
+                                                        mean_path=MEAN_FILE_PATH)
 
     #x = y = np.arange(-3.5, 4.0, 0.5)
     x = y = np.linspace(-1.0, 1.0, num=best_image_loss_values.shape[0] )
@@ -335,8 +403,12 @@ def main():
     ax.plot_surface(X, Y, best_image_loss_values)
     plt.show()
 
-    np.savetxt(os.path.join(dir, 'best_image_loss.csv'), best_image_loss_values, delimiter=",")
-    np.savetxt(os.path.join(dir, 'worst_image_loss.csv'), worst_image_loss_values, delimiter=",")
+    np.savetxt(os.path.join(dir, 'loss.csv'), loss, delimiter=",")
+    np.savetxt(os.path.join(dir, 'accuracy.csv'), accuracy, delimiter=",")
+    np.savetxt(os.path.join(dir, 'best_loss.csv'), best_image_loss_values, delimiter=",")
+    np.savetxt(os.path.join(dir, 'best_accuracy.csv'), best_image_accuracy, delimiter=",")
+    np.savetxt(os.path.join(dir, 'worst_loss.csv'), worst_image_loss_values, delimiter=",")
+    np.savetxt(os.path.join(dir, 'worst_accuracy.csv'), worst_image_accuracy, delimiter=",")
 
 
 if __name__ == '__main__':
