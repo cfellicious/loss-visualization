@@ -197,7 +197,7 @@ def create_loss_landscape(net=None, vectors=None, best_image=None, best_label=No
             print(loss)
             loss_matrix[x_idx][y_idx] = loss
             accuracy_matrix[x_idx][y_idx] = accuracy
-            
+
 
             softmax_loss_dict = net.forward(data=np.asarray([best_image]))
             loss_best = softmax_loss_dict['prob'][0][best_label]
@@ -315,7 +315,7 @@ def main():
     DB_PATH = filedialog.askdirectory()
     MEAN_FILE_PATH = filedialog.askopenfilename(type='*.binaryproto')
     '''
-    dir = '/home/chris/PycharmProjects/loss-visualization/models/quick_learn'
+    dir = '/home/chris/PycharmProjects/loss-visualization/models/sigmoid'
     steps = 51
     MODEL_FILE = os.path.join(dir, 'solver.prototxt')
     PRETRAINED = os.path.join(dir, 'model.caffemodel')
