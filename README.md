@@ -1,5 +1,5 @@
 # loss-visualization
-This project is to visualize the loss landscape of neural networks. This project uses a CAFFE saved model for visualizing the loss landscape
+This project is to visualize the loss landscape of neural networks. This project uses a CAFFE saved model for visualizing the loss landscape. The project is an experimental implementation of the paper https://arxiv.org/abs/1712.09913
 
 Steps for reproducing the experiment:
 1. Install CAFFE and make pycaffe according to the link http://caffe.berkeleyvision.org/installation.html
